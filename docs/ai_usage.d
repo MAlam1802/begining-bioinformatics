@@ -7,3 +7,4 @@
 - Gemini in Google Colab
   Prompt "How to calculate summation of numbers"
   tested with sample dataset in Rosalind
+  Prompt "explain the function of join in python"

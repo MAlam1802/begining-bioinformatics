@@ -8,3 +8,8 @@
   Prompt "How to calculate summation of numbers"
   tested with sample dataset in Rosalind
   Prompt "explain the function of join in python"
+  Explain error in
+{with open("practice_5.txt", "r") as data:
+  line = data.read
+  for word in line.split():
+    print(word)}

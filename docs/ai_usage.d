@@ -6,4 +6,4 @@
 - How I verified correctness (tests, sample data):
 - Gemini in Google Colab
   Prompt "How to calculate summation of numbers"
-  
+  tested with sample dataset in Rosalind

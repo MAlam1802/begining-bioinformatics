@@ -1,0 +1,148 @@
+mkdir -p ~/jet/home/malam8/ccRCC_PRS/{raw,geno,meta,logs}
+cd ~/jet/home/malam8/ccRCC_PRS
+
+
+
+wget https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/release/20130502/integrated_call_samples_v3.20130502.ALL.panel -O 1000G_samples.panel
+
+cd ~/ccRCC   
+mkdir -p raw geno meta logs
+cd raw
+cd ~/ccRCC_PRS/raw
+
+wget https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/release/20130502/integrated_call_samples_v3.20130502.ALL.panel \ -O 1000G_samples.panel
+head 1000G_samples.panel
+cd ~/ccRCC/raw
+
+ls 
+
+mv integrated_call_samples_v3.20130502.ALL.panel 1000G_samples.panel
+
+ls
+head 1000G_samples.panel
+cd ~/ccRCC_PRS/raw
+
+# EUR samples (super_pop == EUR)
+awk 'NR>1 && $3=="EUR" {print $1, $1}' 1000G_samples.panel > ../meta/EUR_samples.txt
+
+# AFR samples (super_pop == AFR)
+awk 'NR>1 && $3=="AFR" {print $1, $1}' 1000G_samples.panel > ../meta/AFR_samples.txt
+cd ../meta
+
+# Count lines in each
+wc -l EUR_samples.txt AFR_samples.txt
+
+# View top of each file
+head eur_samples.txt
+head afr_samples.txt
+
+cd ~/ccRCC/geno
+
+# EUR PLINK FILES
+wget "https://zenodo.org/records/6614170/files/1000G_EUR.bed?download=1" -O 1000G_EUR.bed
+wget "https://zenodo.org/records/6614170/files/1000G_EUR.bim?download=1" -O 1000G_EUR.bim
+wget "https://zenodo.org/records/6614170/files/1000G_EUR.fam?download=1" -O 1000G_EUR.fam
+
+# AFR PLINK FILES
+wget "https://zenodo.org/records/6614170/files/1000G_AFR.bed?download=1" -O 1000G_AFR.bed
+wget "https://zenodo.org/records/6614170/files/1000G_AFR.bim?download=1" -O 1000G_AFR.bim
+wget "https://zenodo.org/records/6614170/files/1000G_AFR.fam?download=1" -O 1000G_AFR.fam
+
+cd ~/ccRCC/geno
+ls -lh
+wc -l 1000G_EUR.bim 1000G_EUR.fam
+wc -l 1000G_AFR.bim 1000G_AFR.fam
+
+module load plink/1.9
+
+# Sanity check: allele frequencies on chr22
+plink \
+  --bfile 1000G_EUR \
+  --chr 22 \
+  --freq \
+  --out EUR_chr22_check
+
+plink \
+  --bfile 1000G_AFR \
+  --chr 22 \
+  --freq \
+  --out AFR_chr22_check
+cd ~
+mkdir -p tools
+cd tools
+wget https://s3.amazonaws.com/plink1-assets/plink_linux_x86_64_20231211.zip -O plink1.9_linux.zip
+unzip plink1.9_linux.zip -d plink1.9
+cd plink1.9
+ls
+chmod +x plink
+./plink --help
+export PATH=$PATH:~/ccRCC_PRS/tools/plink1.9
+cd ~/ccRCC/geno
+
+
+~/ccRCC/tools/plink1.9/plink --bfile 1000G_EUR --chr 22 --freq --out EUR_chr22_check
+~/ccRCC/tools/plink1.9/plink --bfile 1000G_AFR --chr 22 --freq --out AFR_chr22_check
+
+cd ~/ccRCC
+mkdir -p summary
+cd ~/ccRCC/summary
+ls
+head EUR_ccRCC.for_clump.tsv
+head AFR_ccRCC.for_clump.tsv
+
+# EUR processing
+~/ccRCC/tools/plink1.9/plink --bfile ~/ccRCC/geno/1000G_EUR --clump EUR_ccRCC.for_clump.tsv --clump-p1 5e-8 --clump-p2 1e-3 --clump-r2 0.1 --clump-kb 250 --clump-snp-field SNP --clump-field P --out EUR_clumped
+awk 'NR>1 {print $3}' EUR_clumped.clumped > EUR_clumped.snplist
+wc -l EUR_clumped.snplist
+head EUR_clumped.snplist
+grep -v '^$' EUR_clumped.snplist | sort -u > EUR_clumped.snplist.clean
+mv EUR_clumped.snplist.clean EUR_clumped.snplist
+wc -l EUR_clumped.snplist
+head EUR_clumped.snplist
+awk 'NR==FNR {keep[$1]; next} ($1 in keep) {print $1, $5, $7}' EUR_clumped.snplist EUR_ccRCC.for_clump.tsv > EUR_weights.txt
+head EUR_weights.txt
+wc -l EUR_weights.txt
+
+# AFR processing
+~/ccRCC/tools/plink1.9/plink --bfile ~/ccRCC/geno/1000G_AFR --clump AFR_ccRCC.for_clump.tsv --clump-p1 5e-8 --clump-p2 1e-3 --clump-r2 0.1 --clump-kb 250 --clump-snp-field SNP --clump-field P --out AFR_clumped
+awk 'NR>1 {print $3}' AFR_clumped.clumped > AFR_clumped.snplist
+cat AFR_clumped.snplist
+wc -l AFR_clumped.snplist
+grep -v '^$' AFR_clumped.snplist | sort -u > AFR_clumped.snplist.clean
+mv AFR_clumped.snplist.clean AFR_clumped.snplist
+wc -l AFR_clumped.snplist
+cat AFR_clumped.snplist
+awk 'NR==FNR {keep[$1]; next} ($1 in keep) {print $1, $5, $7}' AFR_clumped.snplist AFR_ccRCC.for_clump.tsv > AFR_weights.txt
+cat AFR_weights.txt
+wc -l AFR_weights.txt
+
+# PRS scoring
+cd ~/ccRCC/geno
+
+# EUR weights on EUR genotype
+~/ccRCC/tools/plink1.9/plink --bfile 1000G_EUR --score ../summary/EUR_weights.txt 1 2 3 sum --out EUR_on_EUR
+
+# EUR weights on AFR genotype
+~/ccRCC/tools/plink1.9/plink --bfile 1000G_AFR --score ../summary/EUR_weights.txt 1 2 3 sum --out EUR_on_AFR
+
+# AFR weights on AFR genotype
+~/ccRCC/tools/plink1.9/plink --bfile 1000G_AFR --score ../summary/AFR_weights.txt 1 2 3 sum --out AFR_on_AFR
+
+# AFR weights on EUR genotype
+~/ccRCC/tools/plink1.9/plink --bfile 1000G_EUR --score ../summary/AFR_weights.txt 1 2 3 sum --out AFR_on_EUR
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
